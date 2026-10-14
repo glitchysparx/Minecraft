@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "MinecraftGameMode.h"
-#include "MinecraftCharacter.h"
+#include "Game/MinecraftGameMode.h"
+#include "Player/MinecraftCharacter.h"
 #include "UObject/ConstructorHelpers.h"
 
 AMinecraftGameMode::AMinecraftGameMode()

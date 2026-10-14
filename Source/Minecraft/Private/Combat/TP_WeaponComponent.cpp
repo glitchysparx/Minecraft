@@ -1,9 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 
-#include "TP_WeaponComponent.h"
-#include "MinecraftCharacter.h"
-#include "MinecraftProjectile.h"
+#include "Combat/TP_WeaponComponent.h"
+#include "Player/MinecraftCharacter.h"
+#include "Combat/MinecraftProjectile.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
