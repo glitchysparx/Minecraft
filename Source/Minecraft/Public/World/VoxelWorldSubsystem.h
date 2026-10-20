@@ -43,8 +43,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Voxel World|Editing")
 	bool TryDestroyBlock(FIntVector GlobalPosition);
 
-	UFUNCTION(BlueprintCallable, Category = "Voxel World|Editing")
-	bool TryDestroyBlockFromHit(const FHitResult& Hit);
+	/*UFUNCTION(BlueprintCallable, Category = "Voxel World|Editing")
+	bool TryDestroyBlockFromHit(const FHitResult& Hit);*/
 
 	UFUNCTION(BlueprintCallable, Category = "Voxel World|Editing")
 	bool TryPlaceBlock(FIntVector GlobalPosition, EVoxelBlockType Type);
