@@ -17,7 +17,7 @@ public:
 
 	/** Number of block cells along each horizontal chunk axis. */
 	UPROPERTY(Config, EditAnywhere, Category = "Chunks", meta = (ClampMin = "1"))
-	FIntPoint WorldSize = FIntPoint(16, 16);
+	FIntPoint InitialWorldSizeXY = FIntPoint(16, 16);
 
 	/** Blueprint Actor class used for spawned chunks. */
 	UPROPERTY(Config, EditAnywhere, Category = "Chunks")

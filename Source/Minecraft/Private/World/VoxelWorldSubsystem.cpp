@@ -1,6 +1,7 @@
 #include "World/VoxelWorldSubsystem.h"
 #include "World/VoxelChunk.h"
 #include "World/VoxelWorldSettings.h"
+#include "World/WorldGenerationFunctionLibrary.h"
 
 
 void UVoxelWorldSubsystem::OnWorldBeginPlay(UWorld& InWorld)
@@ -26,6 +27,7 @@ void UVoxelWorldSubsystem::Tick(float DeltaTime)
 
 TStatId UVoxelWorldSubsystem::GetStatId() const
 {
+	// Unreal uses it to identify and measure the time spent ticking this subsystem
 	RETURN_QUICK_DECLARE_CYCLE_STAT(UVoxelWorldSubsystem, STATGROUP_Tickables);
 }
 
@@ -39,6 +41,87 @@ void UVoxelWorldSubsystem::Deinitialize()
 	bGenerationEnabled = false;
 	OnGenerationStep.Clear();
 	Super::Deinitialize();
+}
+
+bool UVoxelWorldSubsystem::TryDestroyBlock(FIntVector GlobalPosition)
+{
+	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
+	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
+
+	const TObjectPtr<AVoxelChunk>* TargetChunkPtr = Chunks.Find(ChunkIndex);
+	if (!TargetChunkPtr || !IsValid(TargetChunkPtr->Get()))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
+		return false;
+	}
+	
+	AVoxelChunk* TargetChunk = TargetChunkPtr->Get();
+	const bool bResult = TargetChunk->SetBlockAtLocalPosition(BlockLocalPosition, EVoxelBlockType::Air);
+
+	return bResult;
+}
+
+bool UVoxelWorldSubsystem::TryPlaceBlock(FIntVector GlobalPosition, EVoxelBlockType Type)
+{
+	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
+	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
+
+	const TObjectPtr<AVoxelChunk>* TargetChunkPtr = Chunks.Find(ChunkIndex);
+	if (!TargetChunkPtr || !IsValid(TargetChunkPtr->Get()))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
+		return false;
+	}
+
+	AVoxelChunk* TargetChunk = TargetChunkPtr->Get();
+	const bool bResult = TargetChunk->SetBlockAtLocalPosition(BlockLocalPosition, Type);
+
+	return bResult;
+}
+
+bool UVoxelWorldSubsystem::GetBlockAtGlobalPosition(FIntVector GlobalPosition, FVoxelBlock& VoxelBlock)
+{
+	VoxelBlock = FVoxelBlock();
+
+	if (ChunkSize3D.X <= 0 || ChunkSize3D.Y <= 0)
+	{
+		return false;
+	}
+
+	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
+
+	const TObjectPtr<AVoxelChunk>* FoundChunk = Chunks.Find(ChunkIndex);
+	if (!FoundChunk || !IsValid(FoundChunk->Get()))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
+		return false;
+	}
+
+	const FIntVector LocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocal(GlobalPosition, ChunkSize3D);
+
+	return FoundChunk->Get()->GetBlockAtLocalPosition(LocalPosition, VoxelBlock);
+}
+
+bool UVoxelWorldSubsystem::SetBlockAtGlobalPosition(FIntVector GlobalPosition, EVoxelBlockType NewType)
+{
+	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
+
+	const TObjectPtr<AVoxelChunk>* FoundChunk = Chunks.Find(ChunkIndex);
+	if (!FoundChunk || !IsValid(FoundChunk->Get()))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
+		return false;
+	}
+
+	const FIntVector LocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
+
+	// This chunk function handles data changes AND all affected visuals.
+	return FoundChunk->Get()->SetBlockAtLocalPosition(LocalPosition, NewType);
+}
+
+FIntVector UVoxelWorldSubsystem::BlockWorldLocationToGlobalPosition(FVector WorldLocation) const
+{
+	return UWorldGenerationFunctionLibrary::BlockWorldLocationToGlobalPosition(WorldLocation, BlockSize, BlockScale);
 }
 
 bool UVoxelWorldSubsystem::DoesSupportWorldType(EWorldType::Type WorldType) const
@@ -61,7 +144,7 @@ void UVoxelWorldSubsystem::GeneratePendingChunks(FIntPoint CenterChunk, int32 Ma
 
 				if (bIsOnBorder)
 				{
-					PendingChunks.Add(CenterChunk + FIntPoint(X, Y));
+					PendingChunks.Add(FIntVector(CenterChunk.X + X, CenterChunk.Y + Y, 0));
 				}
 			}
 		}
@@ -75,6 +158,7 @@ void UVoxelWorldSubsystem::BuildNextBatch()
 		bool IsGenerationCompleted = ActiveChunk->ProcessGenerationStep(GenerationBatchSize);
 		if (IsGenerationCompleted) 
 		{
+			OnChunkGenerationFinished.Broadcast(NextChunkIndex-1);
 			ActiveChunk = nullptr;
 		}
 	}
@@ -84,7 +168,7 @@ void UVoxelWorldSubsystem::BuildNextBatch()
 	}
 }
 
-AVoxelChunk* UVoxelWorldSubsystem::SpawnNewChunk(FIntPoint TargetChunkIndex)
+AVoxelChunk* UVoxelWorldSubsystem::SpawnNewChunk(FIntVector TargetChunkIndex)
 {
 	if (!IsValid(ChunkClass)) 
 	{
@@ -101,7 +185,9 @@ AVoxelChunk* UVoxelWorldSubsystem::SpawnNewChunk(FIntPoint TargetChunkIndex)
 		return nullptr;
 	}
 
-	NewChunk->InitializeChunk(TargetChunkIndex, ChunkSize, MapHeightRange, NoiseOffset, NoiseFrequency, BlockScale);
+	NewChunk->InitializeChunk(TargetChunkIndex, ChunkSize2D, MapHeightRange, NoiseOffset, NoiseFrequency, BlockScale);
+
+	Chunks.Add(TargetChunkIndex, NewChunk);
 
 	return NewChunk;
 }
@@ -120,16 +206,17 @@ AVoxelChunk* UVoxelWorldSubsystem::SpawnNextChunk()
 		NextChunkIndex = 0;
 		ActiveChunk = nullptr;
 		bGenerationEnabled = false;
+		OnWorldGenerationFinished.Broadcast();
 	}
 
 	return ActiveChunk;
 }
 
-FVector UVoxelWorldSubsystem::CalculateChunkLocation(FIntPoint ChunkIndex)
+FVector UVoxelWorldSubsystem::CalculateChunkLocation(FIntVector ChunkIndex)
 {
-	FIntPoint BlockCountFromZero = ChunkIndex * ChunkSize;
+	FIntVector BlockCountFromZero = ChunkIndex * ChunkSize3D;
 	FVector BlockFinalSize = BlockSize * BlockScale;
-	return FVector(BlockCountFromZero.X * BlockFinalSize.X, BlockCountFromZero.Y * BlockFinalSize.Y, 0 );
+	return FVector(BlockCountFromZero.X * BlockFinalSize.X, BlockCountFromZero.Y * BlockFinalSize.Y, BlockCountFromZero.Z * BlockFinalSize.Z);
 }
 
 const UVoxelWorldSettings* UVoxelWorldSubsystem::GetWorldSettings()
@@ -139,10 +226,12 @@ const UVoxelWorldSettings* UVoxelWorldSubsystem::GetWorldSettings()
 
 void UVoxelWorldSubsystem::ParseWorldGenerationSettings()
 {
+	// Load settings from the world settings object. It only provides consistent values for all generated chunks.
 	const UVoxelWorldSettings* Settings = GetWorldSettings();
 
-	WorldSize = Settings->WorldSize;
-	ChunkSize = Settings->ChunkSize;
+	InitialWorldSizeXY = Settings->InitialWorldSizeXY;
+	ChunkSize2D = Settings->ChunkSize;
+	ChunkSize3D = FIntVector(ChunkSize2D.X, ChunkSize2D.Y, Settings->MapHeightRange.Y);
 	BlockSize = Settings->BlockSize;
 	BlockScale = Settings->BlockScale;
 	NoiseFrequency = Settings->NoiseFrequency;
@@ -152,4 +241,20 @@ void UVoxelWorldSubsystem::ParseWorldGenerationSettings()
 
 	// ChunkClass is a soft reference in settings.
 	ChunkClass = Settings->ChunkClass.LoadSynchronous();
+}
+
+void UVoxelWorldSubsystem::RefreshBlockVisualAtGlobalPosition(FIntVector GlobalPosition)
+{
+	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
+
+	const TObjectPtr<AVoxelChunk>* FoundChunk = Chunks.Find(ChunkIndex);
+	if (!FoundChunk || !IsValid(FoundChunk->Get()))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
+		return;
+	}
+
+	const FIntVector LocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
+
+	FoundChunk->Get()->RefreshBlockVisual(LocalPosition);
 }
