@@ -90,6 +90,8 @@ protected:
 	UFUNCTION()
 	void RefreshBlockVisualAtGlobalPosition(FIntVector GlobalPosition);
 
+	void GenerateNoiseOffset();
+
 private:
 	UPROPERTY(Transient)
 	bool bGenerationEnabled = true;

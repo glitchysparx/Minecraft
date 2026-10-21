@@ -9,6 +9,7 @@ void UVoxelWorldSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	UE_LOG(LogTemp, Warning, TEXT("BeginPlay called for UVoxelWorldSubsystem"));
 
 	ParseWorldGenerationSettings();
+	GenerateNoiseOffset();
 
 	const UVoxelWorldSettings* Settings = GetWorldSettings();
 	GeneratePendingChunks(Settings->CenterChunk, Settings->GenerationRadius);
@@ -254,7 +255,6 @@ void UVoxelWorldSubsystem::ParseWorldGenerationSettings()
 	BlockSize = Settings->BlockSize;
 	BlockScale = Settings->BlockScale;
 	NoiseFrequency = Settings->NoiseFrequency;
-	NoiseOffset = Settings->NoiseOffset;
 	MapHeightRange = Settings->MapHeightRange;
 	GenerationBatchSize = Settings->GenerationBatchSize;
 
@@ -276,4 +276,12 @@ void UVoxelWorldSubsystem::RefreshBlockVisualAtGlobalPosition(FIntVector GlobalP
 	const FIntVector LocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
 
 	FoundChunk->Get()->RefreshBlockVisual(LocalPosition);
+}
+
+void UVoxelWorldSubsystem::GenerateNoiseOffset()
+{
+	// Generate once; every chunk uses this same value.
+	NoiseOffset = FVector2D(
+		FMath::FRandRange(-10000.0f, 10000.0f),
+		FMath::FRandRange(-10000.0f, 10000.0f));
 }

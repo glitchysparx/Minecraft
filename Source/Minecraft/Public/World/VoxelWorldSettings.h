@@ -41,9 +41,6 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Terrain", meta = (ClampMin = "0.000001"))
 	float NoiseFrequency = 0.05f;
 
-	UPROPERTY(Config, EditAnywhere, Category = "Terrain")
-	FVector2D NoiseOffset = FVector2D::ZeroVector;
-
 	/** Maximum number of cells/instances processed by one generation step. */
 	UPROPERTY(Config, EditAnywhere, Category = "Generation", meta = (ClampMin = "1"))
 	int32 GenerationBatchSize = 100;
