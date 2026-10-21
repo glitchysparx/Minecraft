@@ -30,8 +30,8 @@ public:
 
 	/** Store generation settings and reset chunk data/progress */
 	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent, Category = "Voxel Chunk|Generation")
-	bool InitializeChunk (	FIntVector ChunkIndex, FIntPoint ChunkSize,
-							FIntPoint ChunkHeightRange, FVector2D NoiseOffset,
+	bool InitializeChunk (	FIntVector Index, FIntPoint Size,
+							FIntPoint HeightRange, FVector2D NoiseOffset,
 							float NoiseFrequency, FVector BlockScale );
 
 	/** Process a bounded amount of generation work. Return true when complete. */
@@ -39,15 +39,25 @@ public:
 	bool ProcessGenerationStep(int32 BatchSize);
 
 	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent, Category = "Voxel Chunk|Editing")
-	bool GetBlockAtLocalPosition(FIntVector LocalPosition, FVoxelBlock& VoxelBlock);
+	bool GetBlockAtLocalPosition(FIntVector LocalPosition, FVoxelBlock& VoxelBlock, int32& LocalBlockIndex);
 
 	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent, Category = "Voxel Chunk|Editing")
 	bool SetBlockAtLocalPosition(FIntVector LocalPosition, EVoxelBlockType NewType);
 
 	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent, Category = "Voxel Chunk|Editing")
+	bool SetBlockAtLocalPositionWithInstanceHint (	FIntVector LocalPosition, EVoxelBlockType NewType,
+													int32 InstanceIndexHint = -1 );
+
+	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent, Category = "Voxel Chunk|Editing")
 	bool RefreshBlockVisual(FIntVector LocalPosition);
+
+	UFUNCTION(BlueprintCallable, Category = "Voxel Chunk|Chunk Data")
+	FIntVector GetChunkIndex() const { return ChunkIndex; }
 
 protected:
 	UPROPERTY(BlueprintReadWrite)
 	TArray<FVoxelBlock> Blocks;
+
+	UPROPERTY(BlueprintReadWrite)
+	FIntVector ChunkIndex = FIntVector::ZeroValue;
 };

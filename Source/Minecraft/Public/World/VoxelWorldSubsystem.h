@@ -40,11 +40,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Voxel World|Generation")
 	int32 GetGenerationBatchSize() const { return GenerationBatchSize; }
 
+	// Attempts to destroy a block at the specified global position in the voxel world.
+	// Standard method for block destruction, but is less optimized than TryDestroyBlockFromHit.
 	UFUNCTION(BlueprintCallable, Category = "Voxel World|Editing")
 	bool TryDestroyBlock(FIntVector GlobalPosition);
 
-	/*UFUNCTION(BlueprintCallable, Category = "Voxel World|Editing")
-	bool TryDestroyBlockFromHit(const FHitResult& Hit);*/
+	// Attempts to destroy a block based on a hit result, 
+	// which is typically obtained from a line trace or collision detection in the game world.
+	// More optimized than TryDestroyBlock
+	UFUNCTION(BlueprintCallable, Category = "Voxel World|Editing")
+	bool TryDestroyBlockFromHit(const FHitResult& Hit, const float TraceEndOffset = 0.1f);
 
 	UFUNCTION(BlueprintCallable, Category = "Voxel World|Editing")
 	bool TryPlaceBlock(FIntVector GlobalPosition, EVoxelBlockType Type);

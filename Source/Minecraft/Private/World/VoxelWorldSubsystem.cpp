@@ -61,6 +61,25 @@ bool UVoxelWorldSubsystem::TryDestroyBlock(FIntVector GlobalPosition)
 	return bResult;
 }
 
+bool UVoxelWorldSubsystem::TryDestroyBlockFromHit(const FHitResult& Hit, const float TraceEndOffset)
+{
+	if (!Hit.bBlockingHit) { return false; }
+
+	// Check if the hit actor is a valid voxel chunk
+	AActor* HitActor = Hit.GetActor();
+	if (!IsValid(HitActor)) { return false; }
+	AVoxelChunk* HitChunk = Cast<AVoxelChunk>(HitActor);
+	if (!IsValid(HitChunk)) { return false; }
+
+	// Convert the hit location to a global block position
+	const FVector HitWorldLocation = Hit.ImpactPoint - Hit.ImpactNormal* TraceEndOffset;
+	const FIntVector BlockGlobalPosition = BlockWorldLocationToGlobalPosition(HitWorldLocation);
+	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocal(BlockGlobalPosition, ChunkSize3D);
+
+	const bool bResult = HitChunk->SetBlockAtLocalPositionWithInstanceHint(BlockLocalPosition, EVoxelBlockType::Air, Hit.Item);
+	return bResult;
+}
+
 bool UVoxelWorldSubsystem::TryPlaceBlock(FIntVector GlobalPosition, EVoxelBlockType Type)
 {
 	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
@@ -75,13 +94,13 @@ bool UVoxelWorldSubsystem::TryPlaceBlock(FIntVector GlobalPosition, EVoxelBlockT
 
 	AVoxelChunk* TargetChunk = TargetChunkPtr->Get();
 	const bool bResult = TargetChunk->SetBlockAtLocalPosition(BlockLocalPosition, Type);
-
 	return bResult;
 }
 
 bool UVoxelWorldSubsystem::GetBlockAtGlobalPosition(FIntVector GlobalPosition, FVoxelBlock& VoxelBlock)
 {
 	VoxelBlock = FVoxelBlock();
+	int32 BlockIndexLocalToChunk = INDEX_NONE;
 
 	if (ChunkSize3D.X <= 0 || ChunkSize3D.Y <= 0)
 	{
@@ -99,7 +118,7 @@ bool UVoxelWorldSubsystem::GetBlockAtGlobalPosition(FIntVector GlobalPosition, F
 
 	const FIntVector LocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocal(GlobalPosition, ChunkSize3D);
 
-	return FoundChunk->Get()->GetBlockAtLocalPosition(LocalPosition, VoxelBlock);
+	return FoundChunk->Get()->GetBlockAtLocalPosition(LocalPosition, VoxelBlock, BlockIndexLocalToChunk);
 }
 
 bool UVoxelWorldSubsystem::SetBlockAtGlobalPosition(FIntVector GlobalPosition, EVoxelBlockType NewType)
