@@ -22,10 +22,6 @@ A Minecraft-style voxel sandbox built with Unreal Engine 5.4 using C++ and Bluep
 | Mouse Wheel | Select the building block type |
 | Space | Jump |
 
-## Known Bugs
-
-- Crafting currently ignores available resource amounts and does not consume resources, allowing unlimited block placement. This bug was left unresolved due to the deadline.
-
 ## Planned Improvements
 
 - `UVoxelDefinitionFunctionLibrary` currently calls `LoadSynchronous()` for the relevant DataTable on every lookup. Move table ownership to a persistent runtime object, load the tables asynchronously once at game startup, and retain their references for subsequent lookups. Already loaded tables are reused by Unreal; the current calls do not necessarily reload them from disk each time.
