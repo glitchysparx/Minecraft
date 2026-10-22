@@ -46,6 +46,8 @@ void UVoxelWorldSubsystem::Deinitialize()
 
 bool UVoxelWorldSubsystem::TryDestroyBlock(FIntVector GlobalPosition)
 {
+	if (!CanRemoveBlock(GlobalPosition)) { return false; }
+
 	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
 	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
 
@@ -75,6 +77,9 @@ bool UVoxelWorldSubsystem::TryDestroyBlockFromHit(const FHitResult& Hit, const f
 	// Convert the hit location to a global block position
 	const FVector HitWorldLocation = Hit.ImpactPoint - Hit.ImpactNormal* TraceEndOffset;
 	const FIntVector BlockGlobalPosition = BlockWorldLocationToGlobalPosition(HitWorldLocation);
+
+	if (!CanRemoveBlock(BlockGlobalPosition)) { return false; }
+
 	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocal(BlockGlobalPosition, ChunkSize3D);
 
 	const bool bResult = HitChunk->SetBlockAtLocalPositionWithInstanceHint(BlockLocalPosition, EVoxelBlockType::Air, Hit.Item);
@@ -83,6 +88,8 @@ bool UVoxelWorldSubsystem::TryDestroyBlockFromHit(const FHitResult& Hit, const f
 
 bool UVoxelWorldSubsystem::TryPlaceBlock(FIntVector GlobalPosition, EVoxelBlockType Type)
 {
+	if (!IsWithinBuildLimits(GlobalPosition)) { return false; }
+
 	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
 	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
 
@@ -257,6 +264,8 @@ void UVoxelWorldSubsystem::ParseWorldGenerationSettings()
 	NoiseFrequency = Settings->NoiseFrequency;
 	MapHeightRange = Settings->MapHeightRange;
 	GenerationBatchSize = Settings->GenerationBatchSize;
+	MinBlockZ = Settings->MinBlockZ;
+	MaxBlockZ = Settings->MaxBlockZ;
 
 	// ChunkClass is a soft reference in settings.
 	ChunkClass = Settings->ChunkClass.LoadSynchronous();
@@ -284,4 +293,14 @@ void UVoxelWorldSubsystem::GenerateNoiseOffset()
 	NoiseOffset = FVector2D(
 		FMath::FRandRange(-10000.0f, 10000.0f),
 		FMath::FRandRange(-10000.0f, 10000.0f));
+}
+
+bool UVoxelWorldSubsystem::CanRemoveBlock(const FIntVector& Position) const
+{
+	return Position.Z > MinBlockZ;
+}
+
+bool UVoxelWorldSubsystem::IsWithinBuildLimits(const FIntVector& Position) const
+{
+	return Position.Z <= MaxBlockZ;
 }

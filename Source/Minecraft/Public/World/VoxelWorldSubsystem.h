@@ -92,11 +92,11 @@ protected:
 
 	void GenerateNoiseOffset();
 
-private:
-	UPROPERTY(Transient)
-	bool bGenerationEnabled = true;
+	bool CanRemoveBlock(const FIntVector& Position) const;
+	bool IsWithinBuildLimits(const FIntVector& Position) const;
 
-	UPROPERTY(Transient)
+private:
+	bool bGenerationEnabled = true;
 	int32 GenerationBatchSize = 100;
 
 	UPROPERTY(Transient)
@@ -111,7 +111,6 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<AVoxelChunk> ActiveChunk = nullptr;
 
-	UPROPERTY(Transient)
 	int32 NextChunkIndex = 0;
 
 	UPROPERTY(Transient)
@@ -120,21 +119,17 @@ private:
 	UPROPERTY(Transient)
 	FIntVector ChunkSize3D;
 
-	UPROPERTY(Transient)
 	FVector BlockSize = FVector::One();
-
-	UPROPERTY(Transient)
 	FVector BlockScale = FVector::One();
 
 	UPROPERTY(Transient)
 	TSubclassOf<AVoxelChunk> ChunkClass;
 
-	UPROPERTY(Transient)
 	FIntPoint MapHeightRange;
 
-	UPROPERTY(Transient)
 	FVector2D NoiseOffset;
-
-	UPROPERTY(Transient)
 	float NoiseFrequency = 0.05;
+
+	int32 MinBlockZ = 0;
+	int32 MaxBlockZ = 0;
 };

@@ -51,4 +51,12 @@ public:
 	/** Number of square rings around the center; zero generates only the center. */
 	UPROPERTY(Config, EditAnywhere, Category = "Generation", meta = (ClampMin = "0"))
 	int32 GenerationRadius = 4;
+
+	// Blocks at this level cannot be destroyed.
+	UPROPERTY(EditAnywhere, Config, Category = "World Limits")
+	int32 MinBlockZ = 0;
+
+	// Highest level where a block can be placed.
+	UPROPERTY(EditAnywhere, Config, Category = "World Limits")
+	int32 MaxBlockZ = 63;
 };
