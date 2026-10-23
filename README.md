@@ -24,4 +24,4 @@ A Minecraft-style voxel sandbox built with Unreal Engine 5.4 using C++ and Bluep
 
 ## Planned Improvements
 
-- `UVoxelDefinitionFunctionLibrary` currently calls `LoadSynchronous()` for the relevant DataTable on every lookup. Move table ownership to a persistent runtime object, load the tables asynchronously once at game startup, and retain their references for subsequent lookups. Already loaded tables are reused by Unreal; the current calls do not necessarily reload them from disk each time.
+- Add a loading screen to hide world generation and enable gameplay only after definitions are loaded, the world is generated, and the player is positioned at a valid spawn location.
