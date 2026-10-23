@@ -2,8 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
-#include "Blocks/VoxelBlockDefinition.h"
-#include "Inventory/VoxelResources.h"
+#include "Voxels/VoxelBlockDefinition.h"
+#include "Voxels/VoxelResources.h"
 #include "VoxelDefinitionFunctionLibrary.generated.h"
 
 class UDataTable;

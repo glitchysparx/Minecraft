@@ -1,23 +1,18 @@
-#include "Blocks/VoxelDefinitionFunctionLibrary.h"
-#include "Blocks/VoxelDefinitionSettings.h"
+#include "Voxels/VoxelDefinitionFunctionLibrary.h"
+#include "Voxels/VoxelDefinitionSettings.h"
 
 bool UVoxelDefinitionFunctionLibrary::FindResourceDefinition(/*UDataTable* Table, */EResourceType ResourceType, FResourceDefinition& OutDefinition)
 {
     OutDefinition = FResourceDefinition{};
 
-    // temporary bad solution ----------------------------------- (it should be loaded once on the game start step asynchronously)
-    const UVoxelDefinitionSettings* Settings =
-        GetDefault<UVoxelDefinitionSettings>();
+    const UVoxelDefinitionSettings* Settings = GetDefault<UVoxelDefinitionSettings>();
 
-    UDataTable* Table =
-        Settings->ResourceDefinitions.LoadSynchronous();
-    // ----------------------------------------------------------
-
+	// Asset is loaded by DefinitionSubsystem, so we can just get it synchronously here
+    UDataTable* Table = Settings->ResourceDefinitions.Get();
     if (!Table || Table->GetRowStruct() != FResourceDefinition::StaticStruct()) { return false; }
 
     TArray<FResourceDefinition*> Rows;
-    Table->GetAllRows<FResourceDefinition>(
-        TEXT("FindResourceDefinition"), Rows);
+    Table->GetAllRows<FResourceDefinition>(TEXT("FindResourceDefinition"), Rows);
 
     for (const FResourceDefinition* Row : Rows)
     {
@@ -35,19 +30,14 @@ bool UVoxelDefinitionFunctionLibrary::FindBlockDefinition(/*UDataTable* Table, *
 {
 	OutDefinition = FBlockDefinition{};
 
-    // temporary bad solution -----------------------------------
-    const UVoxelDefinitionSettings* Settings =
-        GetDefault<UVoxelDefinitionSettings>();
+    const UVoxelDefinitionSettings* Settings = GetDefault<UVoxelDefinitionSettings>();
 
-    UDataTable* Table =
-        Settings->BlockDefinitions.LoadSynchronous();
-    // ----------------------------------------------------------
-
+    // Asset is loaded by DefinitionSubsystem, so we can just get it synchronously here
+    UDataTable* Table = Settings->BlockDefinitions.Get();
 	if(!Table || Table->GetRowStruct() != FBlockDefinition::StaticStruct()) { return false; }
 
     TArray<FBlockDefinition*> Rows;
-    Table->GetAllRows<FBlockDefinition>(
-        TEXT("FindBlockDefinition"), Rows);
+    Table->GetAllRows<FBlockDefinition>(TEXT("FindBlockDefinition"), Rows);
 
     for (const FBlockDefinition* Row : Rows)
     {
