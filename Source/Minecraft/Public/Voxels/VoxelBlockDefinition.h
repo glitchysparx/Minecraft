@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
-#include "Inventory/VoxelResources.h"
+#include "Voxels/VoxelResources.h"
 #include "World/VoxelBlock.h"
 #include "VoxelBlockDefinition.generated.h"
 
