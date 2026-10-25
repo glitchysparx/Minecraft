@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "World/VoxelBlock.h"
 #include "VoxelDefinitionSubsystem.generated.h"
 
 class UDataTable;
@@ -22,6 +23,12 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
+	UFUNCTION(BlueprintCallable, Category = "Definitions")
+	TArray<EVoxelBlockType> GetBuildingBlockTypeOrder() const
+	{
+		return BuildingBlockTypeOrder;
+	}
+
 	UPROPERTY(BlueprintAssignable, Category = "Definitions")
 	FOnDefinitionsReady OnDefinitionsReady;
 
@@ -33,8 +40,20 @@ public:
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Definitions")
 	TObjectPtr<UDataTable> BlockDefinitions = nullptr;
 
+	UFUNCTION(BlueprintCallable, Category = "Definitions")
+	bool AreDefinitionsReady() const
+	{
+		return ResourceDefinitions != nullptr && BlockDefinitions != nullptr;
+	}
+
 private:
 	void HandleDefinitionsLoaded();
 
+	UFUNCTION()
+	void InitializeBuildingBlockOrder();
+
 	TSharedPtr<FStreamableHandle> LoadHandle;
+
+	UPROPERTY(Transient)
+	TArray<EVoxelBlockType> BuildingBlockTypeOrder;
 };

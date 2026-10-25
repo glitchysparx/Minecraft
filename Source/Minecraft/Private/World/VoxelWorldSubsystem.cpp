@@ -185,7 +185,8 @@ void UVoxelWorldSubsystem::BuildNextBatch()
 		bool IsGenerationCompleted = ActiveChunk->ProcessGenerationStep(GenerationBatchSize);
 		if (IsGenerationCompleted) 
 		{
-			OnChunkGenerationFinished.Broadcast(NextChunkIndex-1);
+			const FIntVector ChunkIndex = ActiveChunk->GetChunkIndex();
+			OnChunkGenerationFinished.Broadcast(ChunkIndex);
 			ActiveChunk = nullptr;
 		}
 	}
