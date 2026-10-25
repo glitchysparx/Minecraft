@@ -1,6 +1,7 @@
 #include "Voxels/VoxelDefinitionFunctionLibrary.h"
 #include "Voxels/VoxelDefinitionSettings.h"
 
+
 bool UVoxelDefinitionFunctionLibrary::FindResourceDefinition(/*UDataTable* Table, */EResourceType ResourceType, FResourceDefinition& OutDefinition)
 {
     OutDefinition = FResourceDefinition{};

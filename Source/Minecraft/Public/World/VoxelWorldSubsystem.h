@@ -10,7 +10,8 @@ class AVoxelChunk;
 class UVoxelWorldSettings;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVoxelGenerationStep, int32, Value);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FVoxelGeneration);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FChunkGeneration, FIntVector, Value);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FWorldGeneration);
 
 /** World-scoped entry point for voxel world generation and chunk management. */
 UCLASS(BlueprintType)
@@ -29,10 +30,10 @@ public:
 	FVoxelGenerationStep OnGenerationStep;
 
 	UPROPERTY(BlueprintAssignable, Category = "Voxel World|Generation")
-	FVoxelGenerationStep OnChunkGenerationFinished;
+	FChunkGeneration OnChunkGenerationFinished;
 
 	UPROPERTY(BlueprintAssignable, Category = "Voxel World|Generation")
-	FVoxelGeneration OnWorldGenerationFinished;
+	FWorldGeneration OnWorldGenerationFinished;
 
 	UFUNCTION(BlueprintPure, Category = "Voxel World|Generation")
 	bool IsGenerationEnabled() const { return bGenerationEnabled; }
@@ -62,6 +63,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Voxel World|Math")
 	FIntVector BlockWorldLocationToGlobalPosition(FVector WorldLocation) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Voxel World|Generation")
+	int32 GetPendingChunksCount() const 
+	{
+		return PendingChunks.Num();
+	}
 
 protected:
 	virtual bool DoesSupportWorldType(EWorldType::Type WorldType) const override;

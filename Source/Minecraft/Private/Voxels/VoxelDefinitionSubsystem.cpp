@@ -1,5 +1,6 @@
 #include "Voxels/VoxelDefinitionSubsystem.h"
 #include "Voxels/VoxelDefinitionSettings.h"
+#include "Voxels/VoxelBlockDefinition.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
 
@@ -49,5 +50,25 @@ void UVoxelDefinitionSubsystem::HandleDefinitionsLoaded()
         return;
     }
 
+    InitializeBuildingBlockOrder();
+
     OnDefinitionsReady.Broadcast();
+}
+
+void UVoxelDefinitionSubsystem::InitializeBuildingBlockOrder()
+{
+    BuildingBlockTypeOrder.Reset();
+
+    // Use that same order as it was set in Data Table
+    for (const FName RowName : BlockDefinitions->GetRowNames())
+    {
+        const FBlockDefinition* Row =
+            BlockDefinitions->FindRow<FBlockDefinition>(
+                RowName, TEXT("Initialize building order"));
+
+        if (Row)
+        {
+            BuildingBlockTypeOrder.Add(Row->BlockType);
+        }
+    }
 }
