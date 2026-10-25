@@ -64,11 +64,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Voxel World|Math")
 	FIntVector BlockWorldLocationToGlobalPosition(FVector WorldLocation) const;
 
+	UFUNCTION(BlueprintCallable, Category = "Voxel World|Math")
+	FVector SnapWorldLocationToBlockOrigin(FVector WorldLocation) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Voxel World|Generation")
 	int32 GetPendingChunksCount() const 
 	{
 		return PendingChunks.Num();
 	}
+
+	UFUNCTION(BlueprintCallable, Category = "Voxel World|Generation")
+	FVector FindSafePlayerSpawnLocation() const;
 
 protected:
 	virtual bool DoesSupportWorldType(EWorldType::Type WorldType) const override;
@@ -89,7 +95,7 @@ protected:
 	FVector CalculateChunkLocation(FIntVector ChunkIndex);
 
 	UFUNCTION()
-	const UVoxelWorldSettings* GetWorldSettings();
+	const UVoxelWorldSettings* GetWorldSettings() const;
 
 	UFUNCTION()
 	void ParseWorldGenerationSettings();

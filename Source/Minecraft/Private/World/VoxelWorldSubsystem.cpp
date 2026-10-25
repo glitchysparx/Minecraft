@@ -151,6 +151,23 @@ FIntVector UVoxelWorldSubsystem::BlockWorldLocationToGlobalPosition(FVector Worl
 	return UWorldGenerationFunctionLibrary::BlockWorldLocationToGlobalPosition(WorldLocation, BlockSize, BlockScale);
 }
 
+FVector UVoxelWorldSubsystem::SnapWorldLocationToBlockOrigin(FVector WorldLocation) const
+{
+	return UWorldGenerationFunctionLibrary::SnapWorldLocationToBlockOrigin(WorldLocation, BlockSize, BlockScale);
+}
+
+FVector UVoxelWorldSubsystem::FindSafePlayerSpawnLocation() const
+{
+	const UVoxelWorldSettings* Settings = GetWorldSettings();
+	const FIntPoint CenterChunkIndex2D = Settings->CenterChunk;
+	const FIntVector CenterChunkIndex3D(CenterChunkIndex2D.X, CenterChunkIndex2D.Y, 0);
+
+	FVector TargetLocation = UWorldGenerationFunctionLibrary::BlockGlobalPositionToWorldLocation(CenterChunkIndex3D, ChunkSize3D, BlockSize, BlockScale);
+	TargetLocation.Z = static_cast<double>(MapHeightRange.Y) * BlockSize.Z * BlockScale.Z;
+
+	return TargetLocation;
+}
+
 bool UVoxelWorldSubsystem::DoesSupportWorldType(EWorldType::Type WorldType) const
 {
 	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
@@ -247,7 +264,7 @@ FVector UVoxelWorldSubsystem::CalculateChunkLocation(FIntVector ChunkIndex)
 	return FVector(BlockCountFromZero.X * BlockFinalSize.X, BlockCountFromZero.Y * BlockFinalSize.Y, BlockCountFromZero.Z * BlockFinalSize.Z);
 }
 
-const UVoxelWorldSettings* UVoxelWorldSubsystem::GetWorldSettings()
+const UVoxelWorldSettings* UVoxelWorldSubsystem::GetWorldSettings() const
 {
 	return GetDefault<UVoxelWorldSettings>();
 }
