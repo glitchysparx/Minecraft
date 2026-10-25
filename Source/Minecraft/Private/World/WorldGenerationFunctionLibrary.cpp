@@ -84,6 +84,26 @@ FIntVector UWorldGenerationFunctionLibrary::BlockWorldLocationToGlobalPosition(F
 	);
 }
 
+FVector UWorldGenerationFunctionLibrary::BlockGlobalPositionToWorldLocation(FIntVector GlobalPosition, FIntVector ChunkSize, FVector BlockSize, FVector BlockScale)
+{
+	const FVector CellSize = BlockSize * BlockScale;
+	return FVector(
+		GlobalPosition.X * ChunkSize.X * CellSize.X,
+		GlobalPosition.Y * ChunkSize.Y * CellSize.Y,
+		GlobalPosition.Z * ChunkSize.Z * CellSize.Z
+	);
+}
+
+FVector UWorldGenerationFunctionLibrary::SnapWorldLocationToBlockOrigin(FVector WorldLocation, FVector BlockSize, FVector BlockScale)
+{
+	const FVector CellSize = BlockSize * BlockScale;
+	return FVector(
+		FMath::FloorToDouble(WorldLocation.X / CellSize.X) * CellSize.X,
+		FMath::FloorToDouble(WorldLocation.Y / CellSize.Y) * CellSize.Y,
+		FMath::FloorToDouble(WorldLocation.Z / CellSize.Z) * CellSize.Z
+	);
+}
+
 FVector UWorldGenerationFunctionLibrary::BlockLocalPositionToChunkLocalLocation(FIntVector LocalPosition, FVector BlockSize, FVector BlockScale)
 {
 	return FVector(LocalPosition)* BlockSize* BlockScale;

@@ -52,6 +52,12 @@ public:
 	static FIntVector BlockWorldLocationToGlobalPosition(FVector WorldLocation, FVector BlockSize, FVector BlockScale);
 
 	UFUNCTION(BlueprintPure, Category = "WorldGeneration|Math")
+	static FVector BlockGlobalPositionToWorldLocation(FIntVector GlobalPosition, FIntVector ChunkSize, FVector BlockSize, FVector BlockScale);
+
+	UFUNCTION(BlueprintPure, Category = "WorldGeneration|Math")
+	static FVector SnapWorldLocationToBlockOrigin(FVector WorldLocation, FVector BlockSize, FVector BlockScale);
+
+	UFUNCTION(BlueprintPure, Category = "WorldGeneration|Math")
 	static FVector BlockLocalPositionToChunkLocalLocation(FIntVector LocalPosition, FVector BlockSize, FVector BlockScale);
 
 	UFUNCTION(BlueprintPure, Category = "WorldGeneration|Math")
