@@ -19,6 +19,18 @@ struct FPendingBlockInstance
 };
 
 
+UENUM(BlueprintType)
+enum class EChunkGenerationState : uint8
+{
+	Empty,
+	Pending,
+	GenerateData,
+	FindExposedBlocks,
+	BuildingInstances,
+	Completed
+};
+
+
 /** Base for Blueprint chunks whose generation is scheduled by the world subsystem. */
 UCLASS(Blueprintable)
 class MINECRAFT_API AVoxelChunk : public AActor
@@ -54,10 +66,46 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Voxel Chunk|Chunk Data")
 	FIntVector GetChunkIndex() const { return ChunkIndex; }
 
+	UFUNCTION(BlueprintCallable, Category = "Voxel Chunk|Chunk Data")
+	bool IsGenerationInProgress() const 
+	{ 
+		return	GenerationState != EChunkGenerationState::Completed 
+				&& GenerationState != EChunkGenerationState::Pending;
+	}
+
+	UFUNCTION(BlueprintCallable, Category = "Voxel Chunk|Chunk Data")
+	bool IsGenerationComplete() const 
+	{ 
+		return GenerationState == EChunkGenerationState::Completed; 
+	}
+
+	UFUNCTION(BlueprintCallable, Category = "Voxel Chunk|Chunk Data")
+	EChunkGenerationState GetGenerationState() const { return GenerationState; }
+
+	UFUNCTION(BlueprintCallable, Category = "Voxel Chunk|Chunk Data")
+	bool IsGenerationPending() const 
+	{ 
+		return GenerationState == EChunkGenerationState::Pending; 
+	}
+
+	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent, meta = (ForceAsFunction), Category = "Voxel Chunk|Generation")
+	void CancelGenerationAndClear();
+
+	bool MarkGenerationPending();
+
 protected:
+	UFUNCTION(BlueprintCallable, Category = "Voxel Chunk|Chunk Data")
+	void SetGenerationState(EChunkGenerationState NewState) 
+	{
+		GenerationState = NewState;
+	}
+
 	UPROPERTY(BlueprintReadWrite)
 	TArray<FVoxelBlock> Blocks;
 
 	UPROPERTY(BlueprintReadWrite)
 	FIntVector ChunkIndex = FIntVector::ZeroValue;
+
+	UPROPERTY(BlueprintReadWrite)
+	EChunkGenerationState GenerationState = EChunkGenerationState::Pending;
 };

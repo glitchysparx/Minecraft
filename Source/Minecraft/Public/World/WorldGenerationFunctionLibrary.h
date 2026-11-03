@@ -62,4 +62,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "WorldGeneration|Math")
 	static int32 FindBlockInstanceIndexByLocation(const UInstancedStaticMeshComponent* Component, FVector TargetLocation, bool bWorldSpace = false);
+
+
 };
