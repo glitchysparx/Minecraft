@@ -41,9 +41,13 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Terrain", meta = (ClampMin = "0.000001"))
 	float NoiseFrequency = 0.05f;
 
-	/** Maximum number of cells/instances processed by one generation step. */
+	/** Maximum number of cells/instances processed by one generation step during initial world generation process*/
 	UPROPERTY(Config, EditAnywhere, Category = "Generation", meta = (ClampMin = "1"))
-	int32 GenerationBatchSize = 100;
+	int32 InitialGenerationBatchSize = 1000;
+
+	/** Maximum number of cells/instances processed by one generation step during gameplay*/
+	UPROPERTY(Config, EditAnywhere, Category = "Generation", meta = (ClampMin = "1"))
+	int32 GameplayGenerationBatchSize = 300;
 
 	UPROPERTY(Config, EditAnywhere, Category = "Chunks", meta = (ClampMin = "1"))
 	FIntPoint CenterChunk = FIntPoint(8, 8);

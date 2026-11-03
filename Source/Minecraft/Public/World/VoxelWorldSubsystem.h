@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "VoxelBlock.h"
+#include "PendingChunkQueue.h"
 #include "VoxelWorldSubsystem.generated.h"
 
 // VoxelWorldSubsystem.h
@@ -29,11 +30,17 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Voxel World|Generation")
 	FVoxelGenerationStep OnGenerationStep;
 
+	// Every time an individual chunk completes generation
 	UPROPERTY(BlueprintAssignable, Category = "Voxel World|Generation")
 	FChunkGeneration OnChunkGenerationFinished;
 
+	// Every time the generation system finishes its current workload
 	UPROPERTY(BlueprintAssignable, Category = "Voxel World|Generation")
-	FWorldGeneration OnWorldGenerationFinished;
+	FWorldGeneration OnChunkGenerationQueueDrained;
+
+	// Once when the required initial spawn region becomes ready
+	UPROPERTY(BlueprintAssignable, Category = "Voxel World|Generation")
+	FWorldGeneration OnInitialWorldReady;
 
 	UFUNCTION(BlueprintPure, Category = "Voxel World|Generation")
 	bool IsGenerationEnabled() const { return bGenerationEnabled; }
@@ -78,18 +85,20 @@ public:
 
 protected:
 	virtual bool DoesSupportWorldType(EWorldType::Type WorldType) const override;
+	
+	AVoxelChunk* FindOrCreateChunk(FIntVector ChunkIndex);
 
 	UFUNCTION()
 	void GeneratePendingChunks(FIntPoint CenterChunk, int32 MaximumRadius);
+
+	UFUNCTION()
+	void UnloadDepartingChunks(FIntVector PreviousCenter, FIntVector CurrentCenter, int32 KeepRadius);
 
 	UFUNCTION()
 	void BuildNextBatch();
 
 	UFUNCTION()
 	AVoxelChunk* SpawnNewChunk(FIntVector TargetChunkIndex);
-
-	UFUNCTION()
-	AVoxelChunk* SpawnNextChunk();
 
 	UFUNCTION()
 	FVector CalculateChunkLocation(FIntVector ChunkIndex);
@@ -108,15 +117,26 @@ protected:
 	bool CanRemoveBlock(const FIntVector& Position) const;
 	bool IsWithinBuildLimits(const FIntVector& Position) const;
 
+	void CheckPlayerChunk();
+
+	UFUNCTION()
+	bool UnloadChunk(FIntVector ChunkIndex);
+
+	void OnInitialWorldGenerated();
+
 private:
+	bool bInitialWorldReady = false;
+
 	bool bGenerationEnabled = true;
 	int32 GenerationBatchSize = 100;
+
+	int32 InitialGenerationBatchSize = 100;
+	int32 GameplayGenerationBatchSize = 100;
 
 	UPROPERTY(Transient)
 	FIntPoint InitialWorldSizeXY;
 
-	UPROPERTY(Transient)
-	TArray<FIntVector> PendingChunks;
+	FPendingChunkQueue PendingChunks;
 
 	UPROPERTY(Transient)
 	TMap<FIntVector, TObjectPtr<AVoxelChunk>> Chunks;
@@ -124,8 +144,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<AVoxelChunk> ActiveChunk = nullptr;
 
-	int32 NextChunkIndex = 0;
-
+	int32 GenerationRadius = 0;
+	int32 UnloadMargin = 2;
+	
 	UPROPERTY(Transient)
 	FIntPoint ChunkSize2D;
 
@@ -145,4 +166,8 @@ private:
 
 	int32 MinBlockZ = 0;
 	int32 MaxBlockZ = 0;
+
+	FTimerHandle ChunkCheckTimerHandle;
+	const float ChunkCheckTimerDelta = 1.f; // in seconds
+	FIntVector LastPlayerChunkIndex = FIntVector::ZeroValue;
 };

@@ -6,3 +6,15 @@ AVoxelChunk::AVoxelChunk()
 	PrimaryActorTick.bCanEverTick = false;
 }
 
+
+bool AVoxelChunk::MarkGenerationPending()
+{
+    if (GenerationState != EChunkGenerationState::Empty)
+    {
+        return false;
+    }
+
+    SetGenerationState(EChunkGenerationState::Pending);
+    return true;
+}
+
