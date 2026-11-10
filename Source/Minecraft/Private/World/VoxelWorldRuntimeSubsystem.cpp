@@ -1,25 +1,24 @@
-#include "World/VoxelWorldSubsystem.h"
+#include "World/VoxelWorldRuntimeSubsystem.h"
 #include "World/VoxelChunk.h"
 #include "World/VoxelWorldSettings.h"
 #include "World/WorldGenerationFunctionLibrary.h"
+
+#include "SaveSystem/VoxelWorldSaveSubsystem.h"
+#include "SaveSystem/VoxelChunkDelta.h"
+
 #include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/Character.h"
 
 
-void UVoxelWorldSubsystem::OnWorldBeginPlay(UWorld& InWorld)
+void UVoxelWorldRuntimeSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
-	UE_LOG(LogTemp, Warning, TEXT("BeginPlay called for UVoxelWorldSubsystem"));
+	SaveSubsystem = InWorld.GetSubsystem<UVoxelWorldSaveSubsystem>();
 
-	ParseWorldGenerationSettings();
-	GenerateNoiseOffset();
-
-	const UVoxelWorldSettings* Settings = GetWorldSettings();
-	GenerationRadius = Settings->GenerationRadius;
-	GeneratePendingChunks(Settings->CenterChunk, GenerationRadius);
+	GeneratePendingChunks(LastPlayerChunkIndex, GenerationRadius);
 }
 
-void UVoxelWorldSubsystem::Tick(float DeltaTime)
+void UVoxelWorldRuntimeSubsystem::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
@@ -27,45 +26,58 @@ void UVoxelWorldSubsystem::Tick(float DeltaTime)
 	BuildNextBatch();
 }
 
-TStatId UVoxelWorldSubsystem::GetStatId() const
+TStatId UVoxelWorldRuntimeSubsystem::GetStatId() const
 {
 	// Unreal uses it to identify and measure the time spent ticking this subsystem
-	RETURN_QUICK_DECLARE_CYCLE_STAT(UVoxelWorldSubsystem, STATGROUP_Tickables);
+	RETURN_QUICK_DECLARE_CYCLE_STAT(UVoxelWorldRuntimeSubsystem, STATGROUP_Tickables);
 }
 
-bool UVoxelWorldSubsystem::IsTickable() const
+bool UVoxelWorldRuntimeSubsystem::IsTickable() const
 {
 	return !IsTemplate() && IsInitialized() && bGenerationEnabled;
 }
 
-void UVoxelWorldSubsystem::Deinitialize()
+void UVoxelWorldRuntimeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+	ParseWorldGenerationSettings();
+	GenerateNoiseOffset();
+}
+
+void UVoxelWorldRuntimeSubsystem::Deinitialize()
 {
 	bGenerationEnabled = false;
 	OnGenerationStep.Clear();
+
+	//CurrentSaveGame->NoiseFrequency = GetNoiseFrequency();
+	//CurrentSaveGame->NoiseOffset = GetNoiseOffset();
+	GetLastVisitedChunkIndex();
+
+
 	Super::Deinitialize();
 }
 
-bool UVoxelWorldSubsystem::TryDestroyBlock(FIntVector GlobalPosition)
+bool UVoxelWorldRuntimeSubsystem::TryDestroyBlock(FIntVector GlobalPosition)
 {
 	if (!CanRemoveBlock(GlobalPosition)) { return false; }
 
+	const FIntVector ChunkSize3D = GenerationSettings.GetChunkSize3D();
 	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
 	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
 
-	const TObjectPtr<AVoxelChunk>* TargetChunkPtr = Chunks.Find(ChunkIndex);
-	if (!TargetChunkPtr || !IsValid(TargetChunkPtr->Get()))
+	AVoxelChunk* TargetChunk = Chunks.FindRef(ChunkIndex);
+	if (!IsValid(TargetChunk))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
 		return false;
 	}
 	
-	AVoxelChunk* TargetChunk = TargetChunkPtr->Get();
 	const bool bResult = TargetChunk->SetBlockAtLocalPosition(BlockLocalPosition, EVoxelBlockType::Air);
 
 	return bResult;
 }
 
-bool UVoxelWorldSubsystem::TryDestroyBlockFromHit(const FHitResult& Hit, const float TraceEndOffset)
+bool UVoxelWorldRuntimeSubsystem::TryDestroyBlockFromHit(const FHitResult& Hit, const float TraceEndOffset)
 {
 	if (!Hit.bBlockingHit) { return false; }
 
@@ -81,36 +93,37 @@ bool UVoxelWorldSubsystem::TryDestroyBlockFromHit(const FHitResult& Hit, const f
 
 	if (!CanRemoveBlock(BlockGlobalPosition)) { return false; }
 
-	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocal(BlockGlobalPosition, ChunkSize3D);
+	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocal(BlockGlobalPosition, GenerationSettings.GetChunkSize3D());
 
 	const bool bResult = HitChunk->SetBlockAtLocalPositionWithInstanceHint(BlockLocalPosition, EVoxelBlockType::Air, Hit.Item);
 	return bResult;
 }
 
-bool UVoxelWorldSubsystem::TryPlaceBlock(FIntVector GlobalPosition, EVoxelBlockType Type)
+bool UVoxelWorldRuntimeSubsystem::TryPlaceBlock(FIntVector GlobalPosition, EVoxelBlockType Type)
 {
 	if (!IsWithinBuildLimits(GlobalPosition)) { return false; }
 
+	const FIntVector ChunkSize3D = GenerationSettings.GetChunkSize3D();
 	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
 	const FIntVector BlockLocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
 
-	const TObjectPtr<AVoxelChunk>* TargetChunkPtr = Chunks.Find(ChunkIndex);
-	if (!TargetChunkPtr || !IsValid(TargetChunkPtr->Get()))
+	AVoxelChunk* TargetChunk = Chunks.FindRef(ChunkIndex);
+	if (!IsValid(TargetChunk))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
 		return false;
 	}
 
-	AVoxelChunk* TargetChunk = TargetChunkPtr->Get();
 	const bool bResult = TargetChunk->SetBlockAtLocalPosition(BlockLocalPosition, Type);
 	return bResult;
 }
 
-bool UVoxelWorldSubsystem::GetBlockAtGlobalPosition(FIntVector GlobalPosition, FVoxelBlock& VoxelBlock)
+bool UVoxelWorldRuntimeSubsystem::GetBlockAtGlobalPosition(FIntVector GlobalPosition, FVoxelBlock& VoxelBlock)
 {
 	VoxelBlock = FVoxelBlock();
 	int32 BlockIndexLocalToChunk = INDEX_NONE;
 
+	const FIntVector ChunkSize3D = GenerationSettings.GetChunkSize3D();
 	if (ChunkSize3D.X <= 0 || ChunkSize3D.Y <= 0)
 	{
 		return false;
@@ -118,8 +131,8 @@ bool UVoxelWorldSubsystem::GetBlockAtGlobalPosition(FIntVector GlobalPosition, F
 
 	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
 
-	const TObjectPtr<AVoxelChunk>* FoundChunk = Chunks.Find(ChunkIndex);
-	if (!FoundChunk || !IsValid(FoundChunk->Get()))
+	AVoxelChunk* TargetChunk = Chunks.FindRef(ChunkIndex);
+	if (!IsValid(TargetChunk))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
 		return false;
@@ -127,15 +140,16 @@ bool UVoxelWorldSubsystem::GetBlockAtGlobalPosition(FIntVector GlobalPosition, F
 
 	const FIntVector LocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocal(GlobalPosition, ChunkSize3D);
 
-	return FoundChunk->Get()->GetBlockAtLocalPosition(LocalPosition, VoxelBlock, BlockIndexLocalToChunk);
+	return TargetChunk->GetBlockAtLocalPosition(LocalPosition, VoxelBlock, BlockIndexLocalToChunk);
 }
 
-bool UVoxelWorldSubsystem::SetBlockAtGlobalPosition(FIntVector GlobalPosition, EVoxelBlockType NewType)
+bool UVoxelWorldRuntimeSubsystem::SetBlockAtGlobalPosition(FIntVector GlobalPosition, EVoxelBlockType NewType)
 {
+	const FIntVector ChunkSize3D = GenerationSettings.GetChunkSize3D();
 	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
 
-	const TObjectPtr<AVoxelChunk>* FoundChunk = Chunks.Find(ChunkIndex);
-	if (!FoundChunk || !IsValid(FoundChunk->Get()))
+	AVoxelChunk* TargetChunk = Chunks.FindRef(ChunkIndex);
+	if (!IsValid(TargetChunk))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
 		return false;
@@ -144,37 +158,53 @@ bool UVoxelWorldSubsystem::SetBlockAtGlobalPosition(FIntVector GlobalPosition, E
 	const FIntVector LocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
 
 	// This chunk function handles data changes AND all affected visuals.
-	return FoundChunk->Get()->SetBlockAtLocalPosition(LocalPosition, NewType);
+	return TargetChunk->SetBlockAtLocalPosition(LocalPosition, NewType);
 }
 
-FIntVector UVoxelWorldSubsystem::BlockWorldLocationToGlobalPosition(FVector WorldLocation) const
+FIntVector UVoxelWorldRuntimeSubsystem::BlockWorldLocationToGlobalPosition(FVector WorldLocation) const
 {
-	return UWorldGenerationFunctionLibrary::BlockWorldLocationToGlobalPosition(WorldLocation, BlockSize, BlockScale);
+	return UWorldGenerationFunctionLibrary::BlockWorldLocationToGlobalPosition(WorldLocation, GenerationSettings.BlockSize, GenerationSettings.BlockScale);
 }
 
-FVector UVoxelWorldSubsystem::SnapWorldLocationToBlockOrigin(FVector WorldLocation) const
+FVector UVoxelWorldRuntimeSubsystem::SnapWorldLocationToBlockOrigin(FVector WorldLocation) const
 {
-	return UWorldGenerationFunctionLibrary::SnapWorldLocationToBlockOrigin(WorldLocation, BlockSize, BlockScale);
+	return UWorldGenerationFunctionLibrary::SnapWorldLocationToBlockOrigin(WorldLocation, GenerationSettings.BlockSize, GenerationSettings.BlockScale);
 }
 
-FVector UVoxelWorldSubsystem::FindSafePlayerSpawnLocation() const
+FVector UVoxelWorldRuntimeSubsystem::FindSafePlayerSpawnLocation() const
 {
 	const UVoxelWorldSettings* Settings = GetWorldSettings();
 	const FIntPoint CenterChunkIndex2D = Settings->CenterChunk;
 	const FIntVector CenterChunkIndex3D(CenterChunkIndex2D.X, CenterChunkIndex2D.Y, 0);
 
-	FVector TargetLocation = UWorldGenerationFunctionLibrary::BlockGlobalPositionToWorldLocation(CenterChunkIndex3D, ChunkSize3D, BlockSize, BlockScale);
-	TargetLocation.Z = static_cast<double>(MapHeightRange.Y) * BlockSize.Z * BlockScale.Z;
+	FVector TargetLocation = UWorldGenerationFunctionLibrary::BlockGlobalPositionToWorldLocation(CenterChunkIndex3D, GenerationSettings.GetChunkSize3D(), GenerationSettings.BlockSize, GenerationSettings.BlockScale);
+	TargetLocation.Z = static_cast<double>(GenerationSettings.MapHeightRange.Y) * GenerationSettings.BlockSize.Z * GenerationSettings.BlockScale.Z;
 
 	return TargetLocation;
 }
 
-bool UVoxelWorldSubsystem::DoesSupportWorldType(EWorldType::Type WorldType) const
+void UVoxelWorldRuntimeSubsystem::ForEachLoadedChunk(TFunctionRef<void(const AVoxelChunk&)> Visitor) const
+{
+	for (const auto& [Coord, Chunk] : Chunks)
+	{
+		const AVoxelChunk* TargetChunk = Chunk.Get();
+		if (!IsValid(TargetChunk)) { continue; }
+		if (!TargetChunk->IsGenerationComplete()) { continue; }
+		Visitor(*TargetChunk);
+	}
+}
+
+AVoxelChunk* UVoxelWorldRuntimeSubsystem::GetChunkByIndex(const FIntVector ChunkIndex) const
+{
+	return Chunks.FindRef(ChunkIndex);
+}
+
+bool UVoxelWorldRuntimeSubsystem::DoesSupportWorldType(EWorldType::Type WorldType) const
 {
 	return WorldType == EWorldType::Game || WorldType == EWorldType::PIE;
 }
 
-AVoxelChunk* UVoxelWorldSubsystem::FindOrCreateChunk(FIntVector ChunkIndex)
+AVoxelChunk* UVoxelWorldRuntimeSubsystem::FindOrCreateChunk(FIntVector ChunkIndex)
 {
 	AVoxelChunk* TargetChunk = Chunks.FindRef(ChunkIndex);
 	if(IsValid(TargetChunk))
@@ -187,7 +217,7 @@ AVoxelChunk* UVoxelWorldSubsystem::FindOrCreateChunk(FIntVector ChunkIndex)
 	return TargetChunk;
 }
 
-void UVoxelWorldSubsystem::GeneratePendingChunks(FIntPoint CenterChunk, int32 MaximumRadius)
+void UVoxelWorldRuntimeSubsystem::GeneratePendingChunks(FIntVector CenterChunk, int32 MaximumRadius)
 {
 	for (int Radius = 0; Radius <= MaximumRadius; Radius++)
 	{
@@ -200,7 +230,7 @@ void UVoxelWorldSubsystem::GeneratePendingChunks(FIntPoint CenterChunk, int32 Ma
 
 				if (bIsOnBorder)
 				{
-					FIntVector ChunkIndex(CenterChunk.X + X, CenterChunk.Y + Y, 0);
+					FIntVector ChunkIndex(CenterChunk.X + X, CenterChunk.Y + Y, CenterChunk.Z);
 
 					AVoxelChunk* TargetChunk = Chunks.FindRef(ChunkIndex);
 					if (IsValid(TargetChunk))
@@ -217,7 +247,7 @@ void UVoxelWorldSubsystem::GeneratePendingChunks(FIntPoint CenterChunk, int32 Ma
 	bGenerationEnabled = true;
 }
 
-void UVoxelWorldSubsystem::UnloadDepartingChunks(FIntVector PreviousCenter, FIntVector CurrentCenter, int32 KeepRadius)
+void UVoxelWorldRuntimeSubsystem::UnloadDepartingChunks(FIntVector PreviousCenter, FIntVector CurrentCenter, int32 KeepRadius)
 {
 	// Unload columns of chunks
 	const int32 DeltaX = CurrentCenter.X - PreviousCenter.X;
@@ -274,7 +304,7 @@ void UVoxelWorldSubsystem::UnloadDepartingChunks(FIntVector PreviousCenter, FInt
 	}
 }
 
-void UVoxelWorldSubsystem::BuildNextBatch()
+void UVoxelWorldRuntimeSubsystem::BuildNextBatch()
 {
 	if (IsValid(ActiveChunk))
 	{
@@ -312,7 +342,7 @@ void UVoxelWorldSubsystem::BuildNextBatch()
 	}
 }
 
-AVoxelChunk* UVoxelWorldSubsystem::SpawnNewChunk(FIntVector TargetChunkIndex)
+AVoxelChunk* UVoxelWorldRuntimeSubsystem::SpawnNewChunk(FIntVector TargetChunkIndex)
 {
 	if (!IsValid(ChunkClass)) 
 	{
@@ -329,90 +359,107 @@ AVoxelChunk* UVoxelWorldSubsystem::SpawnNewChunk(FIntVector TargetChunkIndex)
 		return nullptr;
 	}
 
-	NewChunk->InitializeChunk(TargetChunkIndex, ChunkSize2D, MapHeightRange, NoiseOffset, NoiseFrequency, BlockScale);
+	NewChunk->InitializeChunk(TargetChunkIndex, GenerationSettings.ChunkSize2D, 
+		GenerationSettings.MapHeightRange, GenerationSettings.NoiseOffset, 
+		GenerationSettings.NoiseFrequency, GenerationSettings.BlockScale, GenerationSettings.BlockSize);
 
 	Chunks.Add(TargetChunkIndex, NewChunk);
 
 	return NewChunk;
 }
 
-FVector UVoxelWorldSubsystem::CalculateChunkLocation(FIntVector ChunkIndex)
+FVector UVoxelWorldRuntimeSubsystem::CalculateChunkLocation(FIntVector ChunkIndex)
 {
-	FIntVector BlockCountFromZero = ChunkIndex * ChunkSize3D;
-	FVector BlockFinalSize = BlockSize * BlockScale;
+	FIntVector BlockCountFromZero = ChunkIndex * GenerationSettings.GetChunkSize3D();
+	FVector BlockFinalSize = GenerationSettings.BlockSize * GenerationSettings.BlockScale;
 	return FVector(BlockCountFromZero.X * BlockFinalSize.X, BlockCountFromZero.Y * BlockFinalSize.Y, BlockCountFromZero.Z * BlockFinalSize.Z);
 }
 
-const UVoxelWorldSettings* UVoxelWorldSubsystem::GetWorldSettings() const
+const UVoxelWorldSettings* UVoxelWorldRuntimeSubsystem::GetWorldSettings() const
 {
 	return GetDefault<UVoxelWorldSettings>();
 }
 
-void UVoxelWorldSubsystem::ParseWorldGenerationSettings()
+void UVoxelWorldRuntimeSubsystem::ParseWorldGenerationSettings()
 {
-	// Load settings from the world settings object. It only provides consistent values for all generated chunks.
 	const UVoxelWorldSettings* Settings = GetWorldSettings();
 
+	// Read settings not saved in the save system
 	InitialWorldSizeXY = Settings->InitialWorldSizeXY;
-	ChunkSize2D = Settings->ChunkSize;
-	ChunkSize3D = FIntVector(ChunkSize2D.X, ChunkSize2D.Y, Settings->MapHeightRange.Y);
-	BlockSize = Settings->BlockSize;
-	BlockScale = Settings->BlockScale;
-	NoiseFrequency = Settings->NoiseFrequency;
-	MapHeightRange = Settings->MapHeightRange;
 	GenerationBatchSize = Settings->InitialGenerationBatchSize;
 	InitialGenerationBatchSize = Settings->InitialGenerationBatchSize;
 	GameplayGenerationBatchSize = Settings->GameplayGenerationBatchSize;
 	MinBlockZ = Settings->MinBlockZ;
 	MaxBlockZ = Settings->MaxBlockZ;
+	GenerationRadius = Settings->GenerationRadius;
+	LastPlayerChunkIndex = FIntVector(Settings->CenterChunk.X, Settings->CenterChunk.Y, 0);
 
 	// ChunkClass is a soft reference in settings.
 	ChunkClass = Settings->ChunkClass.LoadSynchronous();
+
+	// Read settings that can be saved in the save system
+	GenerationSettings = Settings->GenerationSettings;
+
+	if (!IsValid(SaveSubsystem)) 
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Save Subsystem is not valid. Generation settings will be default!"));
+		return; 
+	}
+
+	FVoxelWorldGenerationSettings SavedSettings;
+	/*if (SaveSubsystem->TryGetGenerationSettings(SavedSettings))
+	{
+		GenerationSettings = SavedSettings;
+	}
+	else
+	{
+		SaveSubsystem->SetGenerationSettings(GenerationSettings);
+	}*/
 }
 
-void UVoxelWorldSubsystem::RefreshBlockVisualAtGlobalPosition(FIntVector GlobalPosition)
+void UVoxelWorldRuntimeSubsystem::RefreshBlockVisualAtGlobalPosition(FIntVector GlobalPosition)
 {
-	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, ChunkSize3D);
+	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(GlobalPosition, GenerationSettings.GetChunkSize3D());
 
-	const TObjectPtr<AVoxelChunk>* FoundChunk = Chunks.Find(ChunkIndex);
-	if (!FoundChunk || !IsValid(FoundChunk->Get()))
+	AVoxelChunk* TargetChunk = Chunks.FindRef(ChunkIndex);
+	if (!IsValid(TargetChunk))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for GlobalPosition: %s"), *GlobalPosition.ToString());
 		return;
 	}
 
-	const FIntVector LocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, ChunkSize3D, ChunkIndex);
+	const FIntVector LocalPosition = UWorldGenerationFunctionLibrary::BlockGlobalPositionToLocalByChunkIndex(GlobalPosition, GenerationSettings.GetChunkSize3D(), ChunkIndex);
 
-	FoundChunk->Get()->RefreshBlockVisual(LocalPosition);
+	TargetChunk->RefreshBlockVisual(LocalPosition);
 }
 
-void UVoxelWorldSubsystem::GenerateNoiseOffset()
+void UVoxelWorldRuntimeSubsystem::GenerateNoiseOffset()
 {
 	// Generate once; every chunk uses this same value.
-	NoiseOffset = FVector2D(
+	GenerationSettings.NoiseOffset = FVector2D(
 		FMath::FRandRange(-10000.0f, 10000.0f),
 		FMath::FRandRange(-10000.0f, 10000.0f));
 }
 
-bool UVoxelWorldSubsystem::CanRemoveBlock(const FIntVector& Position) const
+bool UVoxelWorldRuntimeSubsystem::CanRemoveBlock(const FIntVector& Position) const
 {
 	return Position.Z > MinBlockZ;
 }
 
-bool UVoxelWorldSubsystem::IsWithinBuildLimits(const FIntVector& Position) const
+bool UVoxelWorldRuntimeSubsystem::IsWithinBuildLimits(const FIntVector& Position) const
 {
 	return Position.Z <= MaxBlockZ;
 }
 
-void UVoxelWorldSubsystem::CheckPlayerChunk()
+void UVoxelWorldRuntimeSubsystem::CheckPlayerChunk()
 {
 	ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0);
 
 	if (!IsValid(PlayerCharacter)) { return; }
 
 	const FVector PlayerLocation = PlayerCharacter->GetActorLocation();
-	const FIntVector BlockPosition = UWorldGenerationFunctionLibrary::BlockWorldLocationToGlobalPosition(PlayerLocation, BlockSize, BlockScale);
-	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(BlockPosition, ChunkSize3D);
+	const FIntVector BlockPosition = UWorldGenerationFunctionLibrary::BlockWorldLocationToGlobalPosition(PlayerLocation, GenerationSettings.BlockSize, GenerationSettings.BlockScale);
+	const FIntVector ChunkIndex = UWorldGenerationFunctionLibrary::BlockGlobalPositionToChunkIndex(BlockPosition, GenerationSettings.GetChunkSize3D());
 
 	if (LastPlayerChunkIndex == ChunkIndex)
 	{
@@ -425,23 +472,22 @@ void UVoxelWorldSubsystem::CheckPlayerChunk()
 	// That gap prevents chunks repeatedly spawning and despawning 
 	// when the player walks back and forth along a boundary
 
-	GeneratePendingChunks(FIntPoint(ChunkIndex.X, ChunkIndex.Y), GenerationRadius);
+	GeneratePendingChunks(ChunkIndex, GenerationRadius);
 
 	UnloadDepartingChunks(LastPlayerChunkIndex, ChunkIndex, GenerationRadius + UnloadMargin);
 
 	LastPlayerChunkIndex = ChunkIndex;
 }
 
-bool UVoxelWorldSubsystem::UnloadChunk(FIntVector ChunkIndex)
+bool UVoxelWorldRuntimeSubsystem::UnloadChunk(FIntVector ChunkIndex)
 {
-	const TObjectPtr<AVoxelChunk>* TargetChunkPtr = Chunks.Find(ChunkIndex);
-	if (!TargetChunkPtr || !IsValid(TargetChunkPtr->Get()))
+	AVoxelChunk* TargetChunk = Chunks.FindRef(ChunkIndex);
+	if (!IsValid(TargetChunk))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Chunk not found for unloading: %s"), *ChunkIndex.ToString());
 		return false;
 	}
 
-	AVoxelChunk* TargetChunk = TargetChunkPtr->Get();
 	if (TargetChunk->IsGenerationPending())
 	{
 		PendingChunks.Cancel(ChunkIndex);
@@ -452,21 +498,56 @@ bool UVoxelWorldSubsystem::UnloadChunk(FIntVector ChunkIndex)
 		ActiveChunk = nullptr;
 	}
 
+	OnChunkUnloadingRequested.Broadcast(ChunkIndex);
+
+	CaptureChunk(TargetChunk);
+
 	TargetChunk->CancelGenerationAndClear();
 	return true;
 }
 
-void UVoxelWorldSubsystem::OnInitialWorldGenerated()
+void UVoxelWorldRuntimeSubsystem::OnInitialWorldGenerated()
 {
 	OnInitialWorldReady.Broadcast();
 
 	GetWorld()->GetTimerManager().SetTimer(
 		ChunkCheckTimerHandle,
 		this,
-		&UVoxelWorldSubsystem::CheckPlayerChunk,
+		&UVoxelWorldRuntimeSubsystem::CheckPlayerChunk,
 		ChunkCheckTimerDelta,  // Interval in seconds
 		true   // Repeat
 	);
 
 	GenerationBatchSize = GameplayGenerationBatchSize;
+}
+
+void UVoxelWorldRuntimeSubsystem::CaptureLoadedChunks()
+{
+	for (const auto& Pair : Chunks)
+	{
+		CaptureChunk(Pair.Value);
+	}
+}
+
+void UVoxelWorldRuntimeSubsystem::CaptureChunk(AVoxelChunk* TargetChunk)
+{
+	if (!IsValid(TargetChunk)) { return; }
+
+	if (!IsValid(SaveSubsystem))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Save Subsystem is not valid. Chunk will not be saved!"));
+		return;
+	}
+
+	// Check whether the chunk is properly generated and has unsaved modifications
+	if (!TargetChunk->IsDirty() || !TargetChunk->IsGenerationComplete())
+	{
+		return;
+	}
+
+	SaveSubsystem->SaveChunkModifications(TargetChunk->GetChunkIndex(),
+		TargetChunk->GetChunkModification());
+
+	// Mark clean after successful capture.
+	TargetChunk->SetDirty(false);
 }
